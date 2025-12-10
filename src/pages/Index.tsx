@@ -29,6 +29,7 @@ const Index = () => {
   const [results, setResults] = useState<CompatibilityResult[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationProgress, setCalculationProgress] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
   const [error, setError] = useState<string>('');
 
   const handleBridePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,37 +120,67 @@ const Index = () => {
 
       const allPortraits = groomAnalyses.every(analysis => analysis.category === 'portrait');
 
-      const calculatedResults: CompatibilityResult[] = groomPhotos.map((_, index) => {
-        const analysis = groomAnalyses[index];
+      let calculatedResults: CompatibilityResult[];
 
-        if (allPortraits) {
-          return {
+      if (allPortraits) {
+        const remaining = 100 - 33;
+        const secondPercentage = Math.round(remaining / 2);
+        const thirdPercentage = remaining - secondPercentage;
+        
+        calculatedResults = [
+          { groomIndex: 0, percentage: 33 },
+          { groomIndex: 1, percentage: secondPercentage },
+          { groomIndex: 2, percentage: thirdPercentage },
+        ];
+      } else {
+        const withAssets = groomAnalyses.map((analysis, index) => ({
+          index,
+          hasAsset: analysis.category === 'car' || analysis.category === 'apartment',
+        }));
+
+        const assetsCount = withAssets.filter(g => g.hasAsset).length;
+
+        if (assetsCount === 0) {
+          calculatedResults = groomPhotos.map((_, index) => ({
             groomIndex: index,
-            percentage: 33,
-          };
-        }
+            percentage: Math.round(100 / 3),
+          }));
+        } else {
+          const baseForAssets = 70;
+          const baseForPortraits = Math.max(10, (100 - baseForAssets * assetsCount) / (3 - assetsCount));
 
-        if (analysis.category === 'car' || analysis.category === 'apartment') {
-          const highPercentage = 75 + Math.random() * 20;
-          return {
-            groomIndex: index,
-            percentage: Math.round(Math.min(95, highPercentage)),
-          };
-        }
+          calculatedResults = groomPhotos.map((_, index) => {
+            const hasAsset = withAssets[index].hasAsset;
+            const base = hasAsset ? baseForAssets : baseForPortraits;
+            const variation = Math.random() * 5;
+            return {
+              groomIndex: index,
+              percentage: Math.round(base + variation),
+            };
+          });
 
-        const lowPercentage = 30 + Math.random() * 15;
-        return {
-          groomIndex: index,
-          percentage: Math.round(lowPercentage),
-        };
-      });
+          const totalPercentage = calculatedResults.reduce((sum, r) => sum + r.percentage, 0);
+          const difference = totalPercentage - 100;
+          
+          if (difference !== 0) {
+            calculatedResults[0].percentage -= difference;
+          }
+        }
+      }
 
       calculatedResults.sort((a, b) => b.percentage - a.percentage);
 
       setTimeout(() => {
-        setResults(calculatedResults);
-        setIsCalculating(false);
-        setCalculationProgress(0);
+        setShowCelebration(true);
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMHHm7A7+OZUQ0NVKzn7alXEwpFn+PzsWwhBSuCzvPZiTYIGmi78OScTgwPU6vn7KpZEwo9mdjxxHQpBSl+zPLaizsKGGS57eidUBELTqXl8KxdGAk8ltLyu3QqBSp9y/DdjkALElyx6OyoVhQKRJvi8bllHAU2jdDx0IU4CBlnuvDlnE4NCFGp5+2qWhQJO5fT8cZ1KQUqfszw2Yw7CRhkvO/jmVENDlCn5O+nVhULQ5vg8rxnHwU5jtDyx3UpBih7yvDek0ALElyx6OupVRQKRp/i8bheHgU3jM/yyoA3CBlmuO7mnFANC0+m5fCtWhYKPJPR8sF0KQUrfMzv3I0+ChhlvO/jmVENDVKp5u2pWRQKP5jQ8sV0KAUpfMvv24w7CRhlu+/jmlEMDVGp5u2pWhQKP5jQ8sZ1KAUrfMzv3I4+ChhkvO/in1ENDlCn5O+oVxUKQ5ra8blnHwU4jdDyx3YpBil7yvDek0ALElyx6OuoVxULQpnh8LpeHgU3i9Dyz3YpBih7y/Dfk0ALE1ux6eupVhQKRJvi8bdnHgU5jtHxw3YpBSl8yPDdj0ALFV2x6OyoVhQKRJvh8LdmHgU5jtDxw3YoBSl8yPDejT4LF12w6OuoVhQKRZvi8bdnHgU5jtDxw3YpBSh8yPDejkALE1qx6OyqWhQJRJvi8LdnHgU5jtDxw3YqBSl7yPHfjT8LF1ux6OyoVxQKRZvh8LlpHgU4jdDxwnYpBSl8yvDekD4KGVW06O2nVxUKRpvh8LdnHgU5jtDxw3YoBSl8yPDejT4LF1uw6OyoVxUKRJvi8bdnHgU5jtDxw3YoBSl8yPDejT8LGFyw6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl7yPDejkALE1ux6OyoVhQKRJvi8LdnHgU5jtDxw3YpBSl8yPDejT4LF1uw6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT8LF1yx6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LF1uw6OyoVxQLRJvh8LdnHgU5jtDxw3YpBSl8yPDejT4LGFyx6OyqWhQJRJvi8LdnHgU5jtDxw3YoBSl8yPDejj4LGFux6OyoVxQKRZvh8LlpHgU4jdDxwnYpBSl8yvDekD4LGVW16O2nVxQKRZvh8LhnHgU5jtDxw3YoBSl8yPDejT4LGFyx6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LF1uw6OyoVxQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT8LF1yx6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LF1uw6OyoVxQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LGFyx6OyoVxQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LF1ux6OyqWhQJRJvi8LdnHgU5jtDxw3YoBSl8yPDejj4LGFux6OyoVxQKRZvh8LlpHgU4jdDxwnYpBSl8yvDekD4LGVW06O2nVxUKRpvh8LdnHgU5jtDxw3YoBSl8yPDejT4LGFyx6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT4LF1ux6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl8yPDejT8LF1yw6OyoVhQKRJvi8bdnHgU5jtDxw3YpBSl7yPDejkALE1ux6OyoVhQKRJvi8LdnHgU5jtDxw3YpBSl8yPDejT4LF1ux6OyoVxQKRJvi8bdnHgU5jtDxw3YpBSl8yPDej... [truncated]
+        audio.play().catch(() => {});
+        
+        setTimeout(() => {
+          setShowCelebration(false);
+          setResults(calculatedResults);
+          setIsCalculating(false);
+          setCalculationProgress(0);
+        }, 3000);
       }, 500);
     } catch (error) {
       clearInterval(progressInterval);
@@ -168,6 +199,7 @@ const Index = () => {
     ]);
     setResults([]);
     setCalculationProgress(0);
+    setShowCelebration(false);
     setError('');
   };
 
@@ -315,7 +347,7 @@ const Index = () => {
           )}
         </div>
 
-        {isCalculating && (
+        {isCalculating && !showCelebration && (
           <Card className="max-w-3xl mx-auto p-8 bg-white/90 backdrop-blur-sm shadow-xl mb-8 animate-scale-in">
             <div className="space-y-6">
               <div className="text-center">
@@ -343,6 +375,35 @@ const Index = () => {
               </div>
             </div>
           </Card>
+        )}
+
+        {showCelebration && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm animate-fade-in">
+            <div className="relative">
+              <div className="text-center animate-scale-in">
+                <div className="text-9xl mb-6 animate-bounce">
+                  💘
+                </div>
+                <h2 className="text-7xl font-bold text-primary animate-pulse-slow" style={{ textShadow: '0 0 20px rgba(255, 192, 203, 0.8)' }}>
+                  ГОТОВО!
+                </h2>
+              </div>
+              
+              {[...Array(20)].map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute text-4xl animate-fade-in"
+                  style={{
+                    left: `${Math.random() * 100 - 50}vw`,
+                    top: `${Math.random() * 100 - 50}vh`,
+                    animation: `fade-in 0.5s ease-out ${i * 0.1}s, float ${2 + Math.random() * 2}s ease-in-out ${i * 0.1}s infinite`,
+                  }}
+                >
+                  🌸
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {results.length > 0 && !isCalculating && (
