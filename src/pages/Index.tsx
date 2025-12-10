@@ -14,6 +14,11 @@ interface CompatibilityResult {
   percentage: number;
 }
 
+interface PhotoAnalysis {
+  category: 'portrait' | 'car' | 'apartment' | 'unknown';
+  confidence: number;
+}
+
 const Index = () => {
   const [bridePhoto, setBridePhoto] = useState<PhotoUpload>({ file: null, preview: null });
   const [groomPhotos, setGroomPhotos] = useState<PhotoUpload[]>([
@@ -23,6 +28,7 @@ const Index = () => {
   ]);
   const [results, setResults] = useState<CompatibilityResult[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [calculationProgress, setCalculationProgress] = useState(0);
   const [error, setError] = useState<string>('');
 
   const handleBridePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,35 +65,98 @@ const Index = () => {
     }
   };
 
-  const calculateCompatibility = () => {
+  const analyzePhoto = async (photoPreview: string): Promise<PhotoAnalysis> => {
+    try {
+      const base64Data = photoPreview.split(',')[1];
+      
+      const response = await fetch('https://functions.poehali.dev/d65ae10e-b4fb-4333-9270-d6497fdbd6f6', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image_base64: base64Data }),
+      });
+
+      if (!response.ok) {
+        return { category: 'portrait', confidence: 0.5 };
+      }
+
+      const data = await response.json();
+      return data as PhotoAnalysis;
+    } catch (error) {
+      console.error('Photo analysis error:', error);
+      return { category: 'portrait', confidence: 0.5 };
+    }
+  };
+
+  const calculateCompatibility = async () => {
     if (!bridePhoto.file || groomPhotos.some(g => !g.file)) {
       setError('Пожалуйста, загрузите все фотографии');
       return;
     }
 
     setIsCalculating(true);
+    setCalculationProgress(0);
     setError('');
 
-    setTimeout(() => {
-      const calculatedResults: CompatibilityResult[] = groomPhotos.map((_, index) => {
-        const basePercentage = Math.random() * 30 + 55;
-        
-        const ageFactor = index === 0 ? 15 : index === 1 ? -5 : 0;
-        
-        const randomVariation = Math.random() * 10 - 5;
-        
-        const finalPercentage = Math.min(99, Math.max(45, basePercentage + ageFactor + randomVariation));
+    const progressInterval = setInterval(() => {
+      setCalculationProgress(prev => {
+        if (prev >= 85) {
+          clearInterval(progressInterval);
+          return 85;
+        }
+        return prev + Math.random() * 15;
+      });
+    }, 200);
 
+    try {
+      const groomAnalyses = await Promise.all(
+        groomPhotos.map(groom => groom.preview ? analyzePhoto(groom.preview) : Promise.resolve({ category: 'portrait' as const, confidence: 0 }))
+      );
+
+      clearInterval(progressInterval);
+      setCalculationProgress(100);
+
+      const allPortraits = groomAnalyses.every(analysis => analysis.category === 'portrait');
+
+      const calculatedResults: CompatibilityResult[] = groomPhotos.map((_, index) => {
+        const analysis = groomAnalyses[index];
+
+        if (allPortraits) {
+          return {
+            groomIndex: index,
+            percentage: 33,
+          };
+        }
+
+        if (analysis.category === 'car' || analysis.category === 'apartment') {
+          const highPercentage = 75 + Math.random() * 20;
+          return {
+            groomIndex: index,
+            percentage: Math.round(Math.min(95, highPercentage)),
+          };
+        }
+
+        const lowPercentage = 30 + Math.random() * 15;
         return {
           groomIndex: index,
-          percentage: Math.round(finalPercentage),
+          percentage: Math.round(lowPercentage),
         };
       });
 
       calculatedResults.sort((a, b) => b.percentage - a.percentage);
-      setResults(calculatedResults);
+
+      setTimeout(() => {
+        setResults(calculatedResults);
+        setIsCalculating(false);
+        setCalculationProgress(0);
+      }, 500);
+    } catch (error) {
+      clearInterval(progressInterval);
+      setError('Ошибка при анализе фотографий');
       setIsCalculating(false);
-    }, 2000);
+      setCalculationProgress(0);
+    }
   };
 
   const resetAll = () => {
@@ -98,6 +167,7 @@ const Index = () => {
       { file: null, preview: null },
     ]);
     setResults([]);
+    setCalculationProgress(0);
     setError('');
   };
 
@@ -237,7 +307,7 @@ const Index = () => {
               </>
             )}
           </Button>
-          {(allPhotosUploaded || results.length > 0) && (
+          {(allPhotosUploaded || results.length > 0) && !isCalculating && (
             <Button onClick={resetAll} variant="outline" size="lg">
               <Icon name="RotateCcw" size={20} className="mr-2" />
               Начать заново
@@ -245,7 +315,37 @@ const Index = () => {
           )}
         </div>
 
-        {results.length > 0 && (
+        {isCalculating && (
+          <Card className="max-w-3xl mx-auto p-8 bg-white/90 backdrop-blur-sm shadow-xl mb-8 animate-scale-in">
+            <div className="space-y-6">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-primary-foreground mb-2">
+                  Анализируем совместимость...
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  Прогресс: {Math.round(calculationProgress)}%
+                </p>
+                <Progress value={calculationProgress} className="h-3 mb-6" />
+              </div>
+              
+              <div className="flex justify-center">
+                <div className="relative w-full max-w-md aspect-video rounded-lg overflow-hidden shadow-lg">
+                  <img 
+                    src="https://cdn.poehali.dev/files/Yule4TxCtW0.jpg" 
+                    alt="Анализ" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              <div className="text-center text-sm text-muted-foreground">
+                <p className="animate-pulse-slow">Пожалуйста, подождите...</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {results.length > 0 && !isCalculating && (
           <div className="space-y-4 animate-scale-in">
             <h2 className="text-3xl font-bold text-center text-primary-foreground mb-6">
               🎯 Результаты совместимости
